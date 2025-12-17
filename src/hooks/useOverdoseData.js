@@ -62,7 +62,9 @@ export function useOverdoseData() {
     Papa.parse(csvUrl, {
       download: true,
       header: true,
-      worker: true,
+      // Some hosting/browser setups can block workers which causes parsing to never complete.
+      // Keeping this false makes loading more reliable for deployments.
+      worker: false,
       skipEmptyLines: true,
       step: (results) => {
         const row = results.data || {}
@@ -114,7 +116,7 @@ export function useOverdoseData() {
       },
       error: (err) => {
         if (cancelled) return
-        setError(err?.message || 'Failed to load overdoseRates.csv')
+        setError(err?.message || `Failed to load overdoseRates.csv from ${csvUrl}`)
         setLoading(false)
       },
     })
