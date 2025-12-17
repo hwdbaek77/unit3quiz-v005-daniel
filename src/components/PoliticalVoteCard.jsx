@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { doc, increment, onSnapshot, runTransaction, serverTimestamp, setDoc } from 'firebase/firestore'
+import { doc, getDoc, increment, onSnapshot, runTransaction, serverTimestamp, setDoc } from 'firebase/firestore'
 import { firestore, isFirebaseConfigured } from '../firebase/client.js'
 
 function formatNumber(n) {
@@ -10,17 +10,59 @@ function formatNumber(n) {
   }
 }
 
+// Generate or retrieve a unique user ID from localStorage
+function getUserId() {
+  const STORAGE_KEY = 'userVoteId'
+  let userId = localStorage.getItem(STORAGE_KEY)
+  if (!userId) {
+    userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    localStorage.setItem(STORAGE_KEY, userId)
+  }
+  return userId
+}
+
 export default function PoliticalVoteCard({ statementId, statementText }) {
   const configured = isFirebaseConfigured()
+  const userId = useMemo(() => getUserId(), [])
+  
   const voteRef = useMemo(() => {
     if (!configured) return null
     return doc(firestore, 'votes', statementId)
   }, [configured, statementId])
 
+  const userVoteRef = useMemo(() => {
+    if (!configured) return null
+    return doc(firestore, 'userVotes', `${userId}_${statementId}`)
+  }, [configured, userId, statementId])
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [support, setSupport] = useState(0)
   const [against, setAgainst] = useState(0)
+  const [userVote, setUserVote] = useState(null) // 'support', 'against', or null
+  const [savingVote, setSavingVote] = useState(false)
+
+  // Load user's vote on mount using getDoc
+  useEffect(() => {
+    if (!configured || !userVoteRef) return
+
+    async function loadUserVote() {
+      try {
+        const snap = await getDoc(userVoteRef)
+        if (snap.exists()) {
+          const data = snap.data()
+          setUserVote(data.vote || null)
+        } else {
+          setUserVote(null)
+        }
+      } catch (err) {
+        console.error('Failed to load user vote:', err)
+        setError('Failed to load your saved vote.')
+      }
+    }
+
+    loadUserVote()
+  }, [configured, userVoteRef])
 
   useEffect(() => {
     if (!configured || !voteRef) {
@@ -56,21 +98,56 @@ export default function PoliticalVoteCard({ statementId, statementText }) {
   }, [configured, voteRef, statementText])
 
   async function vote(direction) {
-    if (!configured || !voteRef) return
+    if (!configured || !voteRef || !userVoteRef || savingVote) return
     setError('')
+    setSavingVote(true)
+    
+    const previousVote = userVote
+    
     try {
+      // Save user's vote choice to Firestore using setDoc
+      await setDoc(
+        userVoteRef,
+        {
+          vote: direction,
+          statementId,
+          userId,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      )
+      
+      // Update local state immediately for better UX
+      setUserVote(direction)
+
+      // Update aggregate counts using transaction
       await runTransaction(firestore, async (tx) => {
         const snap = await tx.get(voteRef)
         if (!snap.exists()) {
           tx.set(voteRef, { support: 0, against: 0, statement: statementText, createdAt: serverTimestamp() })
         }
-        tx.update(voteRef, {
-          [direction]: increment(1),
-          updatedAt: serverTimestamp(),
-        })
+        
+        const updates = { updatedAt: serverTimestamp() }
+        
+        // If user had a previous vote, decrement it
+        if (previousVote && previousVote !== direction) {
+          updates[previousVote] = increment(-1)
+        }
+        
+        // Increment the new vote (or if no previous vote, just increment)
+        if (!previousVote || previousVote !== direction) {
+          updates[direction] = increment(1)
+        }
+        
+        tx.update(voteRef, updates)
       })
     } catch (e) {
       setError(e?.message || 'Vote failed. Check Firestore rules and your Firebase config.')
+      // Revert user vote state on error
+      setUserVote(previousVote)
+    } finally {
+      setSavingVote(false)
     }
   }
 
@@ -98,13 +175,25 @@ export default function PoliticalVoteCard({ statementId, statementText }) {
         </div>
       ) : null}
 
-      <div className="voteGrid" aria-busy={loading ? 'true' : 'false'}>
-        <button className="btn btn--support" type="button" disabled={!configured} onClick={() => vote('support')}>
+      <div className="voteGrid" aria-busy={loading || savingVote ? 'true' : 'false'}>
+        <button 
+          className={`btn btn--support ${userVote === 'support' ? 'btn--selected' : ''}`} 
+          type="button" 
+          disabled={!configured || savingVote} 
+          onClick={() => vote('support')}
+          aria-pressed={userVote === 'support'}
+        >
           <div className="btn__label">Support</div>
           <div className="btn__value">{formatNumber(support)}</div>
         </button>
 
-        <button className="btn btn--against" type="button" disabled={!configured} onClick={() => vote('against')}>
+        <button 
+          className={`btn btn--against ${userVote === 'against' ? 'btn--selected' : ''}`} 
+          type="button" 
+          disabled={!configured || savingVote} 
+          onClick={() => vote('against')}
+          aria-pressed={userVote === 'against'}
+        >
           <div className="btn__label">Against</div>
           <div className="btn__value">{formatNumber(against)}</div>
         </button>

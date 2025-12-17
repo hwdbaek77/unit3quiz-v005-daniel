@@ -6,6 +6,10 @@ service cloud.firestore {
     match /votes/{id} {
       allow read, write: if true;
     }
+    // Allow users to read/write their own votes
+    match /userVotes/{id} {
+      allow read, write: if true;
+    }
   }
 }
 

@@ -29,6 +29,17 @@ export default function App() {
           </p>
         </section>
 
+        <section className="statementOfIntent card">
+          <div className="statementOfIntent__content">
+            <h2 className="statementOfIntent__title">Statement of Intent</h2>
+            <p className="statementOfIntent__text">
+              The rising drug overdose crisis demands immediate, evidence-based action. We believe that expanding harm-reduction programs, 
+              increasing access to treatment, and prioritizing public health over punitive measures are essential to saving lives. 
+              This dashboard exists to make overdose data accessible and to engage communities in informed discussions about solutions.
+            </p>
+          </div>
+        </section>
+
         <div className="stack">
           <OverdoseTrendsChartCard />
           <PoliticalVoteCard statementId="political-statement-v1" statementText={statement} />

@@ -145,6 +145,33 @@ code {
   line-height: 1.55;
 }
 
+.statementOfIntent {
+  margin: 24px 0;
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0.12), rgba(99, 102, 241, 0.06));
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+.statementOfIntent__content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.statementOfIntent__title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 780;
+  letter-spacing: -0.02em;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.statementOfIntent__text {
+  margin: 0;
+  line-height: 1.65;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 1.05rem;
+}
+
 .card {
   border-radius: var(--radius-lg);
   background: linear-gradient(180deg, rgba(15, 23, 42, 0.84), rgba(15, 23, 42, 0.64));
@@ -303,9 +330,21 @@ code {
   background: linear-gradient(180deg, rgba(34, 197, 94, 0.08), rgba(15, 23, 42, 0.58));
 }
 
+.btn--support.btn--selected {
+  border-color: rgba(34, 197, 94, 0.7);
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.2), rgba(34, 197, 94, 0.1));
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
+}
+
 .btn--against {
   border-color: rgba(239, 68, 68, 0.4);
   background: linear-gradient(180deg, rgba(239, 68, 68, 0.08), rgba(15, 23, 42, 0.58));
+}
+
+.btn--against.btn--selected {
+  border-color: rgba(239, 68, 68, 0.7);
+  background: linear-gradient(180deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.1));
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
 }
 
 .meter {
