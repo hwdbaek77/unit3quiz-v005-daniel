@@ -41,28 +41,42 @@ export default function PoliticalVoteCard({ statementId, statementText }) {
   const [against, setAgainst] = useState(0)
   const [userVote, setUserVote] = useState(null) // 'support', 'against', or null
   const [savingVote, setSavingVote] = useState(false)
+  const [loadingUserVote, setLoadingUserVote] = useState(true)
 
-  // Load user's vote on mount using getDoc
+  // Load user's vote on mount using getDoc - use real-time listener for updates
   useEffect(() => {
-    if (!configured || !userVoteRef) return
-
-    async function loadUserVote() {
-      try {
-        const snap = await getDoc(userVoteRef)
-        if (snap.exists()) {
-          const data = snap.data()
-          setUserVote(data.vote || null)
-        } else {
-          setUserVote(null)
-        }
-      } catch (err) {
-        console.error('Failed to load user vote:', err)
-        setError('Failed to load your saved vote.')
-      }
+    if (!configured || !userVoteRef) {
+      setLoadingUserVote(false)
+      setUserVote(null)
+      return
     }
 
-    loadUserVote()
-  }, [configured, userVoteRef])
+    setLoadingUserVote(true)
+
+    // Use onSnapshot for real-time updates, but also works on initial load
+    const unsubscribe = onSnapshot(
+      userVoteRef,
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data()
+          const voteValue = data.vote || null
+          setUserVote(voteValue)
+          console.log('User vote loaded from Firestore:', voteValue, 'for user:', userId)
+        } else {
+          setUserVote(null)
+          console.log('No user vote found in Firestore for user:', userId)
+        }
+        setLoadingUserVote(false)
+      },
+      (err) => {
+        console.error('Failed to load user vote:', err)
+        setError('Failed to load your saved vote.')
+        setLoadingUserVote(false)
+      }
+    )
+
+    return () => unsubscribe()
+  }, [configured, userVoteRef, userId]) // Include userVoteRef so it updates when ref changes
 
   useEffect(() => {
     if (!configured || !voteRef) {
@@ -175,11 +189,11 @@ export default function PoliticalVoteCard({ statementId, statementText }) {
         </div>
       ) : null}
 
-      <div className="voteGrid" aria-busy={loading || savingVote ? 'true' : 'false'}>
+      <div className="voteGrid" aria-busy={loading || savingVote || loadingUserVote ? 'true' : 'false'}>
         <button 
           className={`btn btn--support ${userVote === 'support' ? 'btn--selected' : ''}`} 
           type="button" 
-          disabled={!configured || savingVote} 
+          disabled={!configured || savingVote || loadingUserVote} 
           onClick={() => vote('support')}
           aria-pressed={userVote === 'support'}
         >
@@ -190,7 +204,7 @@ export default function PoliticalVoteCard({ statementId, statementText }) {
         <button 
           className={`btn btn--against ${userVote === 'against' ? 'btn--selected' : ''}`} 
           type="button" 
-          disabled={!configured || savingVote} 
+          disabled={!configured || savingVote || loadingUserVote} 
           onClick={() => vote('against')}
           aria-pressed={userVote === 'against'}
         >
