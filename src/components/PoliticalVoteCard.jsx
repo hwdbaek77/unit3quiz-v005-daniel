@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { doc, getDoc, increment, onSnapshot, runTransaction, serverTimestamp, setDoc } from 'firebase/firestore'
+import { doc, getDoc, increment, onSnapshot, runTransaction, serverTimestamp, setDoc, collection, query, where, getDocs } from 'firebase/firestore'
 import { firestore, isFirebaseConfigured } from '../firebase/client.js'
 
 function formatNumber(n) {
@@ -84,32 +84,83 @@ export default function PoliticalVoteCard({ statementId, statementText }) {
       return
     }
 
-    // Ensure the document exists so increment updates are always safe.
-    setDoc(
-      voteRef,
-      { support: 0, against: 0, statement: statementText, createdAt: serverTimestamp(), updatedAt: serverTimestamp() },
-      { merge: true },
-    ).catch(() => {
-      // Ignore: if rules block creation, the snapshot below will still surface errors.
-    })
+    let cancelled = false
+
+    // Initialize aggregate document by counting existing user votes if document doesn't exist
+    async function initializeAggregateVotes() {
+      try {
+        const snap = await getDoc(voteRef)
+        if (!snap.exists()) {
+          // Count all user votes for this statement
+          const userVotesRef = collection(firestore, 'userVotes')
+          const q = query(userVotesRef, where('statementId', '==', statementId))
+          const userVotesSnap = await getDocs(q)
+          
+          let supportCount = 0
+          let againstCount = 0
+          userVotesSnap.forEach((docSnap) => {
+            const data = docSnap.data()
+            if (data.vote === 'support') supportCount++
+            if (data.vote === 'against') againstCount++
+          })
+
+          // Create aggregate document with actual counts
+          await setDoc(
+            voteRef,
+            {
+              support: supportCount,
+              against: againstCount,
+              statement: statementText,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          )
+          console.log(`Initialized aggregate votes: support=${supportCount}, against=${againstCount}`)
+        } else {
+          // Document exists, just ensure statement field is set
+          await setDoc(
+            voteRef,
+            { statement: statementText, updatedAt: serverTimestamp() },
+            { merge: true }
+          ).catch(() => {
+            // Ignore errors if rules block update
+          })
+        }
+      } catch (err) {
+        console.error('Failed to initialize aggregate votes:', err)
+        // Continue anyway - the snapshot listener will still work
+      }
+    }
+
+    initializeAggregateVotes()
 
     const unsub = onSnapshot(
       voteRef,
       (snap) => {
+        if (cancelled) return
         const data = snap.data() || {}
-        setSupport(Number(data.support) || 0)
-        setAgainst(Number(data.against) || 0)
+        const supportVal = Number(data.support) || 0
+        const againstVal = Number(data.against) || 0
+        setSupport(supportVal)
+        setAgainst(againstVal)
+        console.log(`Aggregate votes updated: support=${supportVal}, against=${againstVal}`)
         setError('')
         setLoading(false)
       },
       (err) => {
+        if (cancelled) return
+        console.error('Failed to read aggregate votes:', err)
         setError(err?.message || 'Failed to read votes from Firestore.')
         setLoading(false)
       },
     )
 
-    return () => unsub()
-  }, [configured, voteRef, statementText])
+    return () => {
+      cancelled = true
+      unsub()
+    }
+  }, [configured, voteRef, statementId, statementText])
 
   async function vote(direction) {
     if (!configured || !voteRef || !userVoteRef || savingVote) return
